@@ -1,0 +1,151 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { db, auth } from './api/firebase';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { doc, getDoc, setDoc, addDoc, collection } from 'firebase/firestore';
+import { useGraph } from './hooks/useGraph';
+import Toolbar from './components/Toolbar';
+import Canvas from './components/Canvas';
+import Inspector from './components/Inspector';
+import ShareModal from './components/ShareModal';
+
+export default function App() {
+  const graph = useGraph();
+  const [user, setUser] = useState(null);
+  const [graphId, setGraphId] = useState(null);
+  const [title, setTitle] = useState("名称未設定のシェーダー");
+  const [allowEdit, setAllowEdit] = useState(true);
+  const [ownerId, setOwnerId] = useState(null);
+  const [showShare, setShowShare] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    signInAnonymously(auth);
+    onAuthStateChanged(auth, setUser);
+
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    if (id) {
+      setGraphId(id);
+      getDoc(doc(db, 'graphs', id)).then(snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          graph.setNodes(data.nodes);
+          graph.setLinks(data.links);
+          setTitle(data.title || "名称未設定のシェーダー");
+          setAllowEdit(data.allowEdit ?? true);
+          setOwnerId(data.ownerId);
+        }
+        setIsLoading(false);
+      }).catch((err) => {
+        console.error('Error loading graph:', err);
+        setIsLoading(false);
+      });
+    } else {
+      setAllowEdit(true);
+      setOwnerId(null);
+      setIsLoading(false);
+    }
+  }, []);
+
+  const handleSave = async () => {
+    if (!user) return;
+
+    const data = {
+      nodes: graph.nodes,
+      links: graph.links,
+      title,
+      allowEdit,
+      ownerId: ownerId || user.uid,
+      updatedAt: Date.now()
+    };
+
+    if (graphId) {
+      await setDoc(doc(db, 'graphs', graphId), data);
+    } else {
+      const ref = await addDoc(collection(db, 'graphs'), data);
+      setGraphId(ref.id);
+      setOwnerId(user.uid);
+      window.history.pushState({}, '', `?id=${ref.id}`);
+    }
+    alert("Saved!");
+  };
+
+  const isViewOnly = useMemo(() => {
+    if (!graphId) return false;
+    if (user?.uid === ownerId) return false;
+    return !allowEdit;
+  }, [graphId, user, ownerId, allowEdit]);
+
+  const updatePort = (nodeId, type, index, value) => {
+    graph.setNodes(graph.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      const ports = [...node[type]];
+      ports[index] = { ...ports[index], name: value };
+      return { ...node, [type]: ports };
+    }));
+  };
+
+  const addPort = (nodeId, type) => {
+    graph.setNodes(graph.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      return {
+        ...node,
+        [type]: [...node[type], { id: `p${Date.now()}`, name: 'New Port' }]
+      };
+    }));
+  };
+
+  const removePort = (nodeId, type, index) => {
+    const targetNode = graph.nodes.find((node) => node.id === nodeId);
+    if (!targetNode || !targetNode[type][index]) return;
+    const removedPort = targetNode[type][index];
+
+    graph.setNodes(graph.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      return {
+        ...node,
+        [type]: node[type].filter((_, portIndex) => portIndex !== index)
+      };
+    }));
+
+    graph.setLinks(graph.links.filter((link) => {
+      if (type === 'inputs') {
+        return !(link.toNode === nodeId && link.toPort === removedPort.id);
+      }
+      return !(link.fromNode === nodeId && link.fromPort === removedPort.id);
+    }));
+  };
+
+  if (isLoading) {
+    return <div className="h-screen w-screen bg-[#2b2b2b] flex items-center justify-center text-white">Loading...</div>;
+  }
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden text-[#e0e0e0]">
+      <Toolbar 
+        title={title} setTitle={setTitle} 
+        onAdd={graph.addNode} onSave={handleSave} onShare={() => setShowShare(true)}
+        isViewOnly={isViewOnly}
+      />
+      <Canvas graph={graph} isViewOnly={isViewOnly} onMouseDown={() => graph.setSelectedNodeId(null)} />
+      <Inspector 
+        selectedNode={graph.nodes.find(n => n.id === graph.selectedNodeId)}
+        updateNode={graph.updateNode} deleteNode={graph.deleteNode}
+        updatePort={updatePort}
+        addPort={addPort}
+        removePort={removePort}
+        isViewOnly={isViewOnly} onClose={() => graph.setSelectedNodeId(null)}
+      />
+      {showShare && (
+        <ShareModal
+          graphId={graphId}
+          allowEdit={allowEdit}
+          setAllowEdit={setAllowEdit}
+          ownerId={ownerId}
+          user={user}
+          onClose={() => setShowShare(false)}
+        />
+      )}
+    </div>
+    );
+}
