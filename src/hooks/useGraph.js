@@ -7,10 +7,12 @@ export const useGraph = (initialNodes = [], initialLinks = []) => {
     const [draggingNodeId, setDraggingNodeId] = useState(null);
     const[activeLink, setActiveLink] = useState(null);
 
-    const addNode = () => {
+    const addNode = (position = {}) => {
+        const x = typeof position.x === 'number' ? position.x : 50;
+        const y = typeof position.y === 'number' ? position.y : 50;
         const id = `n`+ Date.now();
         setNodes([...nodes, {
-        id, x: 50, y: 50, title: 'New Node', cat: 'math',
+        id, x, y, title: 'New Node', cat: 'math',
         inputs: [{ id: 'in1', name: 'In' }],
         outputs: [{ id: 'out1', name: 'Out' }]
         }]);
