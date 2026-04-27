@@ -17,6 +17,7 @@ export default function App() {
   const [ownerId, setOwnerId] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [forceViewOnly, setForceViewOnly] = useState(false);
 
   useEffect(() => {
     signInAnonymously(auth);
@@ -24,6 +25,8 @@ export default function App() {
 
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
+    const editParam = params.get('edit');
+    setForceViewOnly(editParam === 'false');
     if (id) {
       setGraphId(id);
       getDoc(doc(db, 'graphs', id)).then(snap => {
@@ -50,18 +53,46 @@ export default function App() {
   const handleSave = async () => {
     if (!user) return;
 
-    const data = {
-      nodes: graph.nodes,
-      links: graph.links,
-      title,
-      allowEdit,
-      ownerId: ownerId || user.uid,
-      updatedAt: Date.now()
-    };
-
     if (graphId) {
-      await setDoc(doc(db, 'graphs', graphId), data);
+      const graphRef = doc(db, 'graphs', graphId);
+      const latestSnap = await getDoc(graphRef);
+      if (!latestSnap.exists()) {
+        alert('グラフが見つかりませんでした。');
+        return;
+      }
+
+      const latest = latestSnap.data();
+      const latestOwnerId = latest.ownerId || null;
+      const latestAllowEdit = latest.allowEdit ?? true;
+      const isOwnerNow = latestOwnerId === user.uid;
+      const canEditNow = isOwnerNow || latestAllowEdit;
+
+      if (!canEditNow || forceViewOnly) {
+        alert('このグラフを編集する権限がありません。');
+        return;
+      }
+
+      const data = {
+        nodes: graph.nodes,
+        links: graph.links,
+        title,
+        // 共有設定はオーナーだけが変更できる
+        allowEdit: isOwnerNow ? allowEdit : latestAllowEdit,
+        ownerId: latestOwnerId,
+        updatedAt: Date.now()
+      };
+
+      await setDoc(graphRef, data);
     } else {
+      const data = {
+        nodes: graph.nodes,
+        links: graph.links,
+        title,
+        allowEdit,
+        ownerId: user.uid,
+        updatedAt: Date.now()
+      };
+
       const ref = await addDoc(collection(db, 'graphs'), data);
       setGraphId(ref.id);
       setOwnerId(user.uid);
@@ -70,11 +101,29 @@ export default function App() {
     alert("Saved!");
   };
 
+  const handleAllowEditChange = async (nextAllowEdit) => {
+    setAllowEdit(nextAllowEdit);
+
+    if (!graphId || !user || user.uid !== ownerId) return;
+
+    try {
+      await setDoc(
+        doc(db, 'graphs', graphId),
+        { allowEdit: nextAllowEdit, updatedAt: Date.now() },
+        { merge: true }
+      );
+    } catch (err) {
+      console.error('Error updating share setting:', err);
+      alert('共有設定の保存に失敗しました。');
+    }
+  };
+
   const isViewOnly = useMemo(() => {
+    if (forceViewOnly) return true;
     if (!graphId) return false;
     if (user?.uid === ownerId) return false;
     return !allowEdit;
-  }, [graphId, user, ownerId, allowEdit]);
+  }, [forceViewOnly, graphId, user, ownerId, allowEdit]);
 
   const updatePort = (nodeId, type, index, value) => {
     graph.setNodes(graph.nodes.map((node) => {
@@ -140,7 +189,7 @@ export default function App() {
         <ShareModal
           graphId={graphId}
           allowEdit={allowEdit}
-          setAllowEdit={setAllowEdit}
+          setAllowEdit={handleAllowEditChange}
           ownerId={ownerId}
           user={user}
           onClose={() => setShowShare(false)}
