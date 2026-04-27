@@ -18,6 +18,8 @@ export default function App() {
   const [showShare, setShowShare] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [forceViewOnly, setForceViewOnly] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     signInAnonymously(auth);
@@ -165,6 +167,23 @@ export default function App() {
     }));
   };
 
+  const handleAddNodeAtCenter = () => {
+    const canvasEl = document.getElementById('graph-canvas');
+    if (!canvasEl) {
+      graph.addNode();
+      return;
+    }
+
+    const rect = canvasEl.getBoundingClientRect();
+    const centerX = (rect.width / 2 - canvasOffset.x) / canvasScale;
+    const centerY = (rect.height / 2 - canvasOffset.y) / canvasScale;
+
+    graph.addNode({
+      x: centerX - 100,
+      y: centerY - 40
+    });
+  };
+
   if (isLoading) {
     return <div className="h-screen w-screen bg-[#2b2b2b] flex items-center justify-center text-white">Loading...</div>;
   }
@@ -173,10 +192,18 @@ export default function App() {
     <div className="flex h-screen w-screen overflow-hidden text-[#e0e0e0]">
       <Toolbar 
         title={title} setTitle={setTitle} 
-        onAdd={graph.addNode} onSave={handleSave} onShare={() => setShowShare(true)}
+        onAdd={handleAddNodeAtCenter} onSave={handleSave} onShare={() => setShowShare(true)}
         isViewOnly={isViewOnly}
       />
-      <Canvas graph={graph} isViewOnly={isViewOnly} onMouseDown={() => graph.setSelectedNodeId(null)} />
+      <Canvas
+        graph={graph}
+        isViewOnly={isViewOnly}
+        scale={canvasScale}
+        onScaleChange={setCanvasScale}
+        offset={canvasOffset}
+        onOffsetChange={setCanvasOffset}
+        onMouseDown={() => graph.setSelectedNodeId(null)}
+      />
       <Inspector 
         selectedNode={graph.nodes.find(n => n.id === graph.selectedNodeId)}
         updateNode={graph.updateNode} deleteNode={graph.deleteNode}
