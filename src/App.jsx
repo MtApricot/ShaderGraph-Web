@@ -7,6 +7,7 @@ import Toolbar from './components/Toolbar';
 import Canvas from './components/Canvas';
 import Inspector from './components/Inspector';
 import ShareModal from './components/ShareModal';
+import CategoryManager from './components/CategoryManager';
 
 export default function App() {
   const graph = useGraph();
@@ -16,10 +17,17 @@ export default function App() {
   const [allowEdit, setAllowEdit] = useState(true);
   const [ownerId, setOwnerId] = useState(null);
   const [showShare, setShowShare] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [forceViewOnly, setForceViewOnly] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [categories, setCategories] = useState({
+    input: '#3b82f6',
+    math: '#d97706',
+    effect: '#6366f1',
+    master: '#10b981'
+  });
 
   useEffect(() => {
     signInAnonymously(auth);
@@ -39,6 +47,9 @@ export default function App() {
           setTitle(data.title || "名称未設定のシェーダー");
           setAllowEdit(data.allowEdit ?? true);
           setOwnerId(data.ownerId);
+          if (data.categories) {
+            setCategories(data.categories);
+          }
         }
         setIsLoading(false);
       }).catch((err) => {
@@ -78,6 +89,7 @@ export default function App() {
         nodes: graph.nodes,
         links: graph.links,
         title,
+        categories,
         // 共有設定はオーナーだけが変更できる
         allowEdit: isOwnerNow ? allowEdit : latestAllowEdit,
         ownerId: latestOwnerId,
@@ -90,6 +102,7 @@ export default function App() {
         nodes: graph.nodes,
         links: graph.links,
         title,
+        categories,
         allowEdit,
         ownerId: user.uid,
         updatedAt: Date.now()
@@ -194,6 +207,7 @@ export default function App() {
         title={title} setTitle={setTitle} 
         onAdd={handleAddNodeAtCenter} onSave={handleSave} onShare={() => setShowShare(true)}
         isViewOnly={isViewOnly}
+        onCategoriesClick={() => setShowCategoryManager(true)}
       />
       <Canvas
         graph={graph}
@@ -211,6 +225,9 @@ export default function App() {
         addPort={addPort}
         removePort={removePort}
         isViewOnly={isViewOnly} onClose={() => graph.setSelectedNodeId(null)}
+        categories={categories}
+        onCategoriesChange={setCategories}
+        onOpenCategories={() => setShowCategoryManager(true)}
       />
       {showShare && (
         <ShareModal
@@ -222,6 +239,13 @@ export default function App() {
           onClose={() => setShowShare(false)}
         />
       )}
+      <CategoryManager
+        categories={categories}
+        onCategoriesChange={setCategories}
+        isViewOnly={isViewOnly}
+        isOpen={showCategoryManager}
+        onClose={() => setShowCategoryManager(false)}
+      />
     </div>
     );
 }
