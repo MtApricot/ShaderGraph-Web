@@ -1,12 +1,6 @@
 import React from "react";
 
 const Node = ({ node, isSelected, onSelect, onStartDrag, onStartLink }) => {
-    const catColors = {
-        input: 'bg-blue-600',
-        math: 'bg-amber-800',
-        effect: 'bg-indigo-600',
-        master: 'bg-emerald-700'
-    };
     return (
         <div className={`node absolute w-[200px] bg-[#333] rounded-lg border-2 shadow-xl cursor-grab active:cursor-grabbing ${isSelected ? 'border-blue-500' : 'border-[#444]'}`}
             style={{ left: node.x, top: node.y }}
@@ -15,7 +9,12 @@ const Node = ({ node, isSelected, onSelect, onStartDrag, onStartLink }) => {
                 onStartDrag?.(e);
             }}
         >
-            <div className={`px-3 py-1.5 rounded-t-md text-xs font-bold ${catColors[node.cat]}`}>{node.title}</div>
+            <div 
+              className={`px-3 py-1.5 rounded-t-md text-xs font-bold text-white`}
+              style={{ backgroundColor: node.color || '#d97706' }}
+            >
+              {node.title}
+            </div>
             <div className="flex py-2">
                 <div className="flex-1 flex flex-col gap-2">
                     {node.inputs.map(p => (
