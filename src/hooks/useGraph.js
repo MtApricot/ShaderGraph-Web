@@ -12,7 +12,7 @@ export const useGraph = (initialNodes = [], initialLinks = []) => {
         const y = typeof position.y === 'number' ? position.y : 50;
         const id = `n`+ Date.now();
         setNodes([...nodes, {
-        id, x, y, title: 'New Node', cat: 'math',
+        id, x, y, title: 'New Node', cat: 'math', color: '#d97706',
         inputs: [{ id: 'in1', name: 'In' }],
         outputs: [{ id: 'out1', name: 'Out' }]
         }]);
