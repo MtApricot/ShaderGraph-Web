@@ -1,7 +1,7 @@
 import React from "react";
-import {Plus,Save,Share2,Eye} from "lucide-react";
+import {Plus,Save,Share2,Eye,Tags} from "lucide-react";
 
-const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly }) => {
+const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesClick }) => {
     return (
         <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-[#252525] p-2 rounded-lg border border-[#444] shadow-2xl">
             <input
@@ -19,6 +19,9 @@ const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly }) => {
                 </button>
                 <button onClick={onSave} className="p-1.5 hover:bg-green-600 rounded transition-colors" title="Save">
                     <Save size={18} />
+                </button>
+                <button onClick={onCategoriesClick} className="p-1.5 hover:bg-amber-600 rounded transition-colors" title="Manage Categories">
+                    <Tags size={18} />
                 </button>
                 </>
              )}
