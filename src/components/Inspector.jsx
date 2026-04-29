@@ -1,7 +1,8 @@
 import React from 'react';
-import { Trash2, Settings, Plus, X, Layers, LogIn, LogOut } from 'lucide-react';
+import { Trash2, Settings, Plus, X, Layers, LogIn, LogOut, Palette, Tags } from 'lucide-react';
+import ColorPalette from './ColorPalette';
 
-const Inspector = ({ selectedNode, updateNode, deleteNode, updatePort, addPort, removePort, isViewOnly, onClose }) => {
+const Inspector = ({ selectedNode, updateNode, deleteNode, updatePort, addPort, removePort, isViewOnly, onClose, categories, onCategoriesChange, onOpenCategories }) => {
   if (!selectedNode) return null;
 
   return (
@@ -40,17 +41,37 @@ const Inspector = ({ selectedNode, updateNode, deleteNode, updatePort, addPort, 
           
           <div className="grid grid-cols-[80px_1fr] items-center gap-2">
             <label className="text-[#888]">Category</label>
-            <select 
-              value={selectedNode.cat} 
-              onChange={(e) => updateNode(selectedNode.id, { cat: e.target.value })}
-              disabled={isViewOnly}
-              className="w-full bg-[#2a2a2a] border border-[#444] rounded px-2 py-1.5 outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-all appearance-none disabled:opacity-50"
-            >
-              <option value="input">Input (Blue)</option>
-              <option value="math">Math (Brown)</option>
-              <option value="effect">Effect (Indigo)</option>
-              <option value="master">Master (Green)</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select 
+                value={selectedNode.cat} 
+                onChange={(e) => updateNode(selectedNode.id, { cat: e.target.value })}
+                disabled={isViewOnly}
+                className="w-full bg-[#2a2a2a] border border-[#444] rounded px-2 py-1.5 outline-none focus:border-[#3b82f6] focus:ring-1 focus:ring-[#3b82f6] transition-all appearance-none disabled:opacity-50"
+              >
+                {Object.keys(categories).map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <button 
+                onClick={() => onOpenCategories?.()}
+                disabled={isViewOnly}
+                className="p-1.5 bg-[#2a2a2a] border border-[#444] rounded hover:bg-[#333] text-[#888]"
+                title="Manage categories"
+              >
+                <Tags size={14} />
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[#888] flex items-center gap-2">
+              <Palette size={12} /> Node Color
+            </label>
+            <ColorPalette 
+              color={selectedNode.color}
+              onColorChange={(color) => updateNode(selectedNode.id, { color })}
+              isViewOnly={isViewOnly}
+            />
           </div>
         </div>
 
@@ -148,10 +169,10 @@ const Inspector = ({ selectedNode, updateNode, deleteNode, updatePort, addPort, 
 
       {/* Footer Actions */}
       {!isViewOnly && (
-        <div className="p-4 border-t border-[#333] bg-[#252525]">
+        <div className="p-4 border-t border-[#333] bg-[#252525] space-y-3">
           <button 
             onClick={() => deleteNode(selectedNode.id)}
-            className="w-full py-2 bg-red-500/10 border border-red-500/30 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 font-medium"
+            className="w-full py-2 bg-red-500/10 border border-red-500/30 text-red-500 rounded hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 font-medium text-sm"
           >
             <Trash2 size={16}/> Delete Node
           </button>
