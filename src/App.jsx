@@ -8,6 +8,8 @@ import Canvas from './components/Canvas';
 import Inspector from './components/Inspector';
 import ShareModal from './components/ShareModal';
 import CategoryManager from './components/CategoryManager';
+import NodeSearchModal from './components/NodeSearchModal';
+import { createPresetNode } from './data/unityNodes';
 
 export default function App() {
   const graph = useGraph();
@@ -18,10 +20,12 @@ export default function App() {
   const [ownerId, setOwnerId] = useState(null);
   const [showShare, setShowShare] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showNodeSearchModal, setShowNodeSearchModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [forceViewOnly, setForceViewOnly] = useState(false);
   const [canvasScale, setCanvasScale] = useState(1);
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [presetType, setPresetType] = useState('normal');
   const [categories, setCategories] = useState({
     input: '#3b82f6',
     math: '#d97706',
@@ -197,6 +201,22 @@ export default function App() {
     });
   };
 
+  const handleSelectPresetNode = (nodeData) => {
+    const canvasEl = document.getElementById('graph-canvas');
+    if (!canvasEl) {
+      return;
+    }
+
+    const rect = canvasEl.getBoundingClientRect();
+    const centerX = (rect.width / 2 - canvasOffset.x) / canvasScale;
+    const centerY = (rect.height / 2 - canvasOffset.y) / canvasScale;
+
+    const newNode = createPresetNode(nodeData, centerX - 100, centerY - 40);
+    graph.setNodes([...graph.nodes, newNode]);
+    graph.setSelectedNodeId(newNode.id);
+    setShowNodeSearchModal(false);
+  };
+
   if (isLoading) {
     return <div className="h-screen w-screen bg-[#2b2b2b] flex items-center justify-center text-white">Loading...</div>;
   }
@@ -208,6 +228,8 @@ export default function App() {
         onAdd={handleAddNodeAtCenter} onSave={handleSave} onShare={() => setShowShare(true)}
         isViewOnly={isViewOnly}
         onCategoriesClick={() => setShowCategoryManager(true)}
+        presetType={presetType}
+        onPresetTypeChange={setPresetType}
       />
       <Canvas
         graph={graph}
@@ -217,6 +239,7 @@ export default function App() {
         offset={canvasOffset}
         onOffsetChange={setCanvasOffset}
         onMouseDown={() => graph.setSelectedNodeId(null)}
+        onSpaceKeyPress={() => setShowNodeSearchModal(true)}
       />
       <Inspector 
         selectedNode={graph.nodes.find(n => n.id === graph.selectedNodeId)}
@@ -246,6 +269,13 @@ export default function App() {
         isOpen={showCategoryManager}
         onClose={() => setShowCategoryManager(false)}
       />
+      {showNodeSearchModal && (
+        <NodeSearchModal
+          onSelectNode={handleSelectPresetNode}
+          onClose={() => setShowNodeSearchModal(false)}
+          presetType={presetType}
+        />
+      )}
     </div>
     );
 }
