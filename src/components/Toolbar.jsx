@@ -1,7 +1,7 @@
 import React from "react";
 import {Plus,Save,Share2,Eye,Tags} from "lucide-react";
 
-const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesClick }) => {
+const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesClick,presetType,onPresetTypeChange }) => {
     return (
         <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-[#252525] p-2 rounded-lg border border-[#444] shadow-2xl">
             <input
@@ -11,6 +11,20 @@ const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesCl
                 className="bg-transparent border-none focus:ring-0 font-bold px-2 w-48 text-sm outline-none text-white"
                 placeholder="Shader Name"
             />
+            <div className="h-6 w-[1px] bg-[#444] mx-1" />
+            
+            {!isViewOnly && (
+              <select 
+                value={presetType}
+                onChange={(e) => onPresetTypeChange(e.target.value)}
+                className="bg-[#3d3d3d] text-white text-xs px-2 py-1 rounded border border-[#555] hover:border-[#888] transition"
+                title="Select node preset type"
+              >
+                <option value="normal">Normal</option>
+                <option value="unity">Unity</option>
+                <option value="blender">Blender</option>
+              </select>
+            )}
             <div className="h-6 w-[1px] bg-[#444] mx-1" />
             {!isViewOnly && (
                 <>
