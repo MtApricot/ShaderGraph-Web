@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Node from './Node';
 
 const MIN_SCALE = 0.5;
@@ -11,11 +11,25 @@ const Canvas = ({
   onScaleChange,
   offset = { x: 0, y: 0 },
   onOffsetChange,
-  onMouseDown
+  onMouseDown,
+  onSpaceKeyPress
 }) => {
   const { nodes, links, selectedNodeId, setSelectedNodeId, activeLink, setActiveLink } = graph;
   const { draggingNodeId, setDraggingNodeId, setNodes } = graph;
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // スペースキーイベント
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !isViewOnly) {
+        e.preventDefault();
+        onSpaceKeyPress?.();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isViewOnly, onSpaceKeyPress]);
 
   const toWorldPos = (clientX, clientY) => {
     const canvasEl = document.getElementById('graph-canvas');
