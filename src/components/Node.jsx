@@ -2,8 +2,8 @@ import React from "react";
 
 const Node = ({ node, isSelected, onSelect, onStartDrag, onStartLink }) => {
     return (
-        <div className={`node absolute w-[200px] bg-[#333] rounded-lg border-2 shadow-xl cursor-grab active:cursor-grabbing ${isSelected ? 'border-blue-500' : 'border-[#444]'}`}
-            style={{ left: node.x, top: node.y }}
+            <div className={`node absolute w-[200px] bg-[#333] rounded-lg border-2 shadow-xl cursor-grab active:cursor-grabbing ${isSelected ? 'border-blue-500' : 'border-[#444]'}`}
+                style={{ left: node.x, top: node.y, zIndex: 10 }}
             onMouseDown={(e) => {
                 onSelect(e);
                 onStartDrag?.(e);
