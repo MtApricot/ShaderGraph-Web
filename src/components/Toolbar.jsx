@@ -1,7 +1,7 @@
 import React from "react";
-import {Plus,Save,Share2,Eye,Tags} from "lucide-react";
+import {Plus,Save,Share2,Eye,Tags,Upload} from "lucide-react";
 
-const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesClick,presetType,onPresetTypeChange }) => {
+const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesClick,presetType,onPresetTypeChange,onImport }) => {
     return (
         <div className="absolute top-4 left-4 z-50 flex items-center gap-2 bg-[#252525] p-2 rounded-lg border border-[#444] shadow-2xl">
             <input
@@ -24,6 +24,30 @@ const Toolbar = ({ title,setTitle,onAdd,onSave,onShare,isViewOnly,onCategoriesCl
                 <option value="unity">Unity</option>
                 <option value="blender">Blender</option>
               </select>
+            )}
+            <div className="h-6 w-[1px] bg-[#444] mx-1" />
+            {!isViewOnly && (
+              <input
+                type="file"
+                accept=".shadergraph"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    onImport(e.target.files[0]);
+                    e.target.value = ''; // ファイル選択をリセット
+                  }
+                }}
+                className="hidden"
+                id="shadergraph-import-input"
+              />
+            )}
+            {!isViewOnly && (
+              <button 
+                onClick={() => document.getElementById('shadergraph-import-input')?.click()}
+                className="p-1.5 hover:bg-orange-600 rounded transition-colors" 
+                title="Import .shadergraph file"
+              >
+                <Upload size={18} />
+              </button>
             )}
             <div className="h-6 w-[1px] bg-[#444] mx-1" />
             {!isViewOnly && (
