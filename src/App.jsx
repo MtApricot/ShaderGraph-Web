@@ -9,7 +9,54 @@ import Inspector from './components/Inspector';
 import ShareModal from './components/ShareModal';
 import CategoryManager from './components/CategoryManager';
 import NodeSearchModal from './components/NodeSearchModal';
-import { createPresetNode } from './data/unityNodes';
+import { createPresetNode, importShaderGraphFile } from './data/unityNodes';
+
+const NODE_WIDTH = 200;
+const NODE_MARGIN = 20;
+
+const estimateNodeHeight = (node) => {
+  const inputCount = Array.isArray(node?.inputs) ? node.inputs.length : 0;
+  const outputCount = Array.isArray(node?.outputs) ? node.outputs.length : 0;
+  const rowCount = Math.max(inputCount, outputCount, 1);
+  return 52 + rowCount * 32;
+};
+
+const isOverlapping = (a, b) => {
+  const ax1 = a.x - NODE_MARGIN;
+  const ay1 = a.y - NODE_MARGIN;
+  const ax2 = a.x + NODE_WIDTH + NODE_MARGIN;
+  const ay2 = a.y + estimateNodeHeight(a) + NODE_MARGIN;
+
+  const bx1 = b.x - NODE_MARGIN;
+  const by1 = b.y - NODE_MARGIN;
+  const bx2 = b.x + NODE_WIDTH + NODE_MARGIN;
+  const by2 = b.y + estimateNodeHeight(b) + NODE_MARGIN;
+
+  return ax1 < bx2 && ax2 > bx1 && ay1 < by2 && ay2 > by1;
+};
+
+const findFreeNodePosition = (desiredX, desiredY, existingNodes, probeNode) => {
+  const base = { ...probeNode, x: desiredX, y: desiredY };
+  if (!existingNodes.some((n) => isOverlapping(base, n))) {
+    return { x: desiredX, y: desiredY };
+  }
+
+  for (let attempt = 1; attempt <= 220; attempt += 1) {
+    const ring = Math.floor((attempt - 1) / 10) + 1;
+    const step = (attempt - 1) % 10;
+    const cand = {
+      ...probeNode,
+      x: desiredX + (step - 5) * 44,
+      y: desiredY + ring * 36
+    };
+
+    if (!existingNodes.some((n) => isOverlapping(cand, n))) {
+      return { x: cand.x, y: cand.y };
+    }
+  }
+
+  return { x: desiredX, y: desiredY };
+};
 
 export default function App() {
   const graph = useGraph();
@@ -184,6 +231,26 @@ export default function App() {
     }));
   };
 
+  const handleImportShaderGraph = async (file) => {
+    try {
+      const { nodes: importedNodes, links: importedLinks, title: importedTitle } = await importShaderGraphFile(file);
+      // 再インポート時は既存のグラフを置き換える
+      graph.setNodes([...importedNodes]);
+      graph.setLinks([...importedLinks]);
+      
+      // ファイル名をタイトルに反映
+      if (importedTitle) {
+        setTitle(importedTitle);
+      }
+      
+      const sampleNames = importedNodes.slice(0, 5).map((node) => node.title).join(', ');
+      alert(`${importedTitle} がインポートされました！\nノード数: ${importedNodes.length}, 接続線数: ${importedLinks.length}${sampleNames ? `\n先頭ノード: ${sampleNames}` : ''}`);
+    } catch (error) {
+      console.error('Import error:', error);
+      alert(`インポートエラー: ${error.message}`);
+    }
+  };
+
   const handleAddNodeAtCenter = () => {
     const canvasEl = document.getElementById('graph-canvas');
     if (!canvasEl) {
@@ -195,10 +262,16 @@ export default function App() {
     const centerX = (rect.width / 2 - canvasOffset.x) / canvasScale;
     const centerY = (rect.height / 2 - canvasOffset.y) / canvasScale;
 
-    graph.addNode({
-      x: centerX - 100,
-      y: centerY - 40
-    });
+    const desiredX = centerX - 100;
+    const desiredY = centerY - 40;
+    const pos = findFreeNodePosition(
+      desiredX,
+      desiredY,
+      graph.nodes,
+      { inputs: [{ id: 'in1' }], outputs: [{ id: 'out1' }] }
+    );
+
+    graph.addNode(pos);
   };
 
   const handleSelectPresetNode = (nodeData) => {
@@ -211,7 +284,9 @@ export default function App() {
     const centerX = (rect.width / 2 - canvasOffset.x) / canvasScale;
     const centerY = (rect.height / 2 - canvasOffset.y) / canvasScale;
 
-    const newNode = createPresetNode(nodeData, centerX - 100, centerY - 40);
+    const draftNode = createPresetNode(nodeData, centerX - 100, centerY - 40);
+    const pos = findFreeNodePosition(draftNode.x, draftNode.y, graph.nodes, draftNode);
+    const newNode = { ...draftNode, x: pos.x, y: pos.y };
     graph.setNodes([...graph.nodes, newNode]);
     graph.setSelectedNodeId(newNode.id);
     setShowNodeSearchModal(false);
@@ -230,6 +305,7 @@ export default function App() {
         onCategoriesClick={() => setShowCategoryManager(true)}
         presetType={presetType}
         onPresetTypeChange={setPresetType}
+        onImport={handleImportShaderGraph}
       />
       <Canvas
         graph={graph}

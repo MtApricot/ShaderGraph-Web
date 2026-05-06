@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Node from './Node';
 
-const MIN_SCALE = 0.5;
+const MIN_SCALE = 0.2;
 const MAX_SCALE = 2.5;
 
 const Canvas = ({
@@ -41,14 +41,46 @@ const Canvas = ({
     };
   };
 
+  const toScreenPos = (worldX, worldY) => {
+    return {
+      x: worldX * scale + offset.x,
+      y: worldY * scale + offset.y
+    };
+  };
+
+  const getPortElement = (nodeId, portId, type) => {
+    const candidates = document.querySelectorAll('[data-node][data-port][data-type]');
+    for (const el of candidates) {
+      if (el.dataset.node === nodeId && el.dataset.port === portId && el.dataset.type === type) {
+        return el;
+      }
+    }
+    return null;
+  };
+
   const getPortPos = (nodeId, portId, type) => {
+    // Prefer real DOM position and return canvas-local screen coordinates.
+    const portEl = getPortElement(nodeId, portId, type);
+    if (portEl) {
+      const canvasEl = document.getElementById('graph-canvas');
+      if (!canvasEl) return { x: 0, y: 0 };
+      const rect = portEl.getBoundingClientRect();
+      const canvasRect = canvasEl.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2 - canvasRect.left,
+        y: rect.top + rect.height / 2 - canvasRect.top
+      };
+    }
+
+    // Fallback for first render before DOM is ready.
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return { x: 0, y: 0 };
     const ports = type === 'input' ? node.inputs : node.outputs;
     const index = ports.findIndex(p => p.id === portId);
-    const x = type === 'input' ? node.x : node.x + 200;
-    const y = node.y + 40 + (index * 32) + 12; 
-    return { x, y };
+    const safeIndex = index >= 0 ? index : 0;
+    const worldX = type === 'input' ? node.x : node.x + 200;
+    const worldY = node.y + 40 + (safeIndex * 32) + 12;
+    return toScreenPos(worldX, worldY);
   };
 
   const handleMouseMove = (e) => {
@@ -122,11 +154,43 @@ const Canvas = ({
       onWheel={handleWheel}
       onMouseDown={onMouseDown}
     >
-      <div
-        className="absolute inset-0"
-          style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, transformOrigin: '0 0' }}
-      >
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+      {/** Transform wrapper for nodes */}
+      {(() => {
+        const transformStyle = { transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, transformOrigin: '0 0' };
+        return (
+          <div className="absolute inset-0" style={transformStyle}>
+            {nodes.map(node => (
+              <Node 
+                key={node.id} 
+                node={node} 
+                isSelected={selectedNodeId === node.id}
+                isViewOnly={isViewOnly}
+                onSelect={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
+                  onStartDrag={(e) => {
+                    if (isViewOnly) return;
+                    e.stopPropagation();
+                    const world = toWorldPos(e.clientX, e.clientY);
+                    setSelectedNodeId(node.id);
+                    setDraggingNodeId(node.id);
+                    setDragOffset({ x: world.x - node.x, y: world.y - node.y });
+                  }}
+                onStartLink={(e, nId, pId, type) => {
+                  if(isViewOnly) return;
+                  e.stopPropagation();
+                  const world = toWorldPos(e.clientX, e.clientY);
+                  setActiveLink({ nodeId: nId, portId: pId, type, mx: world.x, my: world.y });
+                }}
+              />
+            ))}
+          </div>
+        );
+      })()}
+
+      {/** SVG overlay for links - sibling to nodes but using same transform */}
+      {(() => {
+        const overlayStyle = { position: 'absolute', inset: 0, zIndex: 999, pointerEvents: 'none', overflow: 'visible' };
+        return (
+          <svg style={overlayStyle} className="w-full h-full">
         {links.map((link, i) => {
           const start = getPortPos(link.fromNode, link.fromPort, 'output');
           const end = getPortPos(link.toNode, link.toPort, 'input');
@@ -144,11 +208,12 @@ const Canvas = ({
         })}
         {activeLink && (() => {
           const start = getPortPos(activeLink.nodeId, activeLink.portId, activeLink.type);
+          const mouse = toScreenPos(activeLink.mx, activeLink.my);
           const isFromIn = activeLink.type === 'input';
-          const x1 = isFromIn ? activeLink.mx : start.x;
-          const y1 = isFromIn ? activeLink.my : start.y;
-          const x2 = isFromIn ? start.x : activeLink.mx;
-          const y2 = isFromIn ? start.y : activeLink.my;
+          const x1 = isFromIn ? mouse.x : start.x;
+          const y1 = isFromIn ? mouse.y : start.y;
+          const x2 = isFromIn ? start.x : mouse.x;
+          const y2 = isFromIn ? start.y : mouse.y;
           return (
             <path 
               d={`M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`}
@@ -156,31 +221,9 @@ const Canvas = ({
             />
           );
         })()}
-      </svg>
-      {nodes.map(node => (
-        <Node 
-          key={node.id} 
-          node={node} 
-          isSelected={selectedNodeId === node.id}
-          isViewOnly={isViewOnly}
-          onSelect={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
-            onStartDrag={(e) => {
-              if (isViewOnly) return;
-              e.stopPropagation();
-              const world = toWorldPos(e.clientX, e.clientY);
-              setSelectedNodeId(node.id);
-              setDraggingNodeId(node.id);
-              setDragOffset({ x: world.x - node.x, y: world.y - node.y });
-            }}
-          onStartLink={(e, nId, pId, type) => {
-            if(isViewOnly) return;
-            e.stopPropagation();
-            const world = toWorldPos(e.clientX, e.clientY);
-            setActiveLink({ nodeId: nId, portId: pId, type, mx: world.x, my: world.y });
-          }}
-        />
-      ))}
-      </div>
+          </svg>
+        );
+      })()}
       <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-black/55 border border-[#444] rounded text-[11px] text-[#cfcfcf] backdrop-blur-sm">
         <button
           className="w-6 h-6 rounded bg-[#2b2b2b] border border-[#555] hover:bg-[#3a3a3a] text-xs"
