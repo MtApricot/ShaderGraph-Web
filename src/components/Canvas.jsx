@@ -12,7 +12,8 @@ const Canvas = ({
   offset = { x: 0, y: 0 },
   onOffsetChange,
   onMouseDown,
-  onSpaceKeyPress
+  onSpaceKeyPress,
+  onFitAll
 }) => {
   const { nodes, links, selectedNodeId, setSelectedNodeId, activeLink, setActiveLink } = graph;
   const { draggingNodeId, setDraggingNodeId, setNodes } = graph;
@@ -225,6 +226,14 @@ const Canvas = ({
         );
       })()}
       <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-black/55 border border-[#444] rounded text-[11px] text-[#cfcfcf] backdrop-blur-sm">
+        <button
+          className="px-2 h-6 rounded bg-[#2b2b2b] border border-[#555] hover:bg-[#3a3a3a] text-[10px]"
+          onClick={() => onFitAll && onFitAll()}
+          title="Fit All"
+          type="button"
+        >
+          Fit
+        </button>
         <button
           className="w-6 h-6 rounded bg-[#2b2b2b] border border-[#555] hover:bg-[#3a3a3a] text-xs"
           onClick={() => setScaleClamped(scale - 0.1)}

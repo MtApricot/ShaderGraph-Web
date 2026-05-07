@@ -101,6 +101,17 @@ export default function App() {
           if (data.categories) {
             setCategories(data.categories);
           }
+          // 初期表示: 読み込んだノードに合わせてフィット
+          setTimeout(() => {
+            fitToNodes(data.nodes);
+            // focusNode パラメータがあればそのノードにズーム
+            const params2 = new URLSearchParams(window.location.search);
+            const focusNode = params2.get('focusNode');
+            if (focusNode) {
+              const node = (data.nodes || []).find(n => n.id === focusNode);
+              if (node) fitToNode(node);
+            }
+          }, 0);
         }
         setIsLoading(false);
       }).catch((err) => {
@@ -113,6 +124,60 @@ export default function App() {
       setIsLoading(false);
     }
   }, []);
+
+  const fitToNodes = (nodes) => {
+    if (!nodes || nodes.length === 0) return;
+    const canvasEl = document.getElementById('graph-canvas');
+    if (!canvasEl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const padding = 40; // px
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    nodes.forEach((n) => {
+      const h = estimateNodeHeight(n);
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + NODE_WIDTH);
+      maxY = Math.max(maxY, n.y + h);
+    });
+
+    const contentW = Math.max(10, maxX - minX);
+    const contentH = Math.max(10, maxY - minY);
+
+    const scaleX = (rect.width - padding * 2) / contentW;
+    const scaleY = (rect.height - padding * 2) / contentH;
+    const s = Math.min(scaleX, scaleY, 2.5);
+    // center
+    const centerX = minX + contentW / 2;
+    const centerY = minY + contentH / 2;
+
+    const offsetX = rect.width / 2 - s * centerX;
+    const offsetY = rect.height / 2 - s * centerY;
+
+    setCanvasScale(Number(s.toFixed(2)));
+    setCanvasOffset({ x: Number(offsetX.toFixed(2)), y: Number(offsetY.toFixed(2)) });
+  };
+
+  const fitToNode = (node) => {
+    if (!node) return;
+    const canvasEl = document.getElementById('graph-canvas');
+    if (!canvasEl) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const padding = 40;
+    const nodeH = estimateNodeHeight(node);
+    const contentW = NODE_WIDTH;
+    const contentH = nodeH;
+    const scaleX = (rect.width - padding * 2) / contentW;
+    const scaleY = (rect.height - padding * 2) / contentH;
+    const s = Math.min(scaleX, scaleY, 2.5);
+    const centerX = node.x + contentW / 2;
+    const centerY = node.y + contentH / 2;
+    const offsetX = rect.width / 2 - s * centerX;
+    const offsetY = rect.height / 2 - s * centerY;
+
+    setCanvasScale(Number(s.toFixed(2)));
+    setCanvasOffset({ x: Number(offsetX.toFixed(2)), y: Number(offsetY.toFixed(2)) });
+  };
 
   const handleSave = async () => {
     if (!user) return;
@@ -244,6 +309,10 @@ export default function App() {
       }
       
       const sampleNames = importedNodes.slice(0, 5).map((node) => node.title).join(', ');
+      // インポート後は新規グラフとして扱い、編集可能にする
+      setGraphId(null);
+      setOwnerId(user?.uid || null);
+      setAllowEdit(true);
       alert(`${importedTitle} がインポートされました！\nノード数: ${importedNodes.length}, 接続線数: ${importedLinks.length}${sampleNames ? `\n先頭ノード: ${sampleNames}` : ''}`);
     } catch (error) {
       console.error('Import error:', error);
@@ -316,7 +385,9 @@ export default function App() {
         onOffsetChange={setCanvasOffset}
         onMouseDown={() => graph.setSelectedNodeId(null)}
         onSpaceKeyPress={() => setShowNodeSearchModal(true)}
+        onFitAll={() => fitToNodes(graph.nodes)}
       />
+      
       <Inspector 
         selectedNode={graph.nodes.find(n => n.id === graph.selectedNodeId)}
         updateNode={graph.updateNode} deleteNode={graph.deleteNode}
