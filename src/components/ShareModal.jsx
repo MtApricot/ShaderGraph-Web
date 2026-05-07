@@ -16,7 +16,6 @@ const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }
       }
     };
 
-    // 標準 API が使えるかチェック
     if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
       try {
         await navigator.clipboard.writeText(text);
@@ -50,8 +49,9 @@ const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }
     }
   };
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}?id=${graphId}`;
-  const embedCode = `<iframe src="${window.location.origin}${window.location.pathname}?id=${graphId}&edit=false" width="100%" height="500px" style="border:1px solid #444; border-radius:8px;"></iframe>`;
+  const [embedHeight, setEmbedHeight] = useState(500);
+  const shareUrl = `${window.location.origin}${window.location.pathname}?id=${graphId}${allowEdit ? '' : '&edit=false'}`;
+  const embedCode = `<iframe src="${window.location.origin}${window.location.pathname}?id=${graphId}&edit=${allowEdit ? 'true' : 'false'}" width="100%" height="${embedHeight}px" style="border:1px solid #444; border-radius:8px;"></iframe>`;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
@@ -105,18 +105,31 @@ const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }
               <label className="text-xs text-gray-400 font-bold uppercase flex items-center gap-1">
                 <Copy size={12}/> ブログ埋め込み用コード (iframe)
               </label>
-              <div className="relative">
-                <textarea
-                  readOnly
-                  value={embedCode}
-                  className="w-full bg-[#1a1a1a] border border-[#444] rounded p-3 text-[10px] text-gray-400 font-mono h-24 outline-none resize-none"
-                />
-                <button
-                  onClick={() => copyText(embedCode, 'embed')}
-                  className="absolute bottom-2 right-2 bg-[#333] hover:bg-[#444] px-3 py-1.5 rounded text-[10px] font-bold border border-[#555]"
-                >
-                  {copiedEmbed ? 'コピー済み!' : 'コードをコピー'}
-                </button>
+              <div>
+                <div className="flex items-center gap-2 mb-2 text-[12px]">
+                  <label className="text-gray-300">高さ(px)</label>
+                  <input
+                    type="number"
+                    value={embedHeight}
+                    min={100}
+                    onChange={(e) => setEmbedHeight(Number(e.target.value) || 100)}
+                    className="w-24 bg-[#111] border border-[#333] rounded px-2 py-1 text-[12px]"
+                  />
+                  <span className="text-gray-400 text-[11px]">編集許可: {allowEdit ? 'あり' : '閲覧のみ'}</span>
+                </div>
+                <div className="relative">
+                  <textarea
+                    readOnly
+                    value={embedCode}
+                    className="w-full bg-[#1a1a1a] border border-[#444] rounded p-3 text-[10px] text-gray-400 font-mono h-24 outline-none resize-none"
+                  />
+                  <button
+                    onClick={() => copyText(embedCode, 'embed')}
+                    className="absolute bottom-2 right-2 bg-[#333] hover:bg-[#444] px-3 py-1.5 rounded text-[10px] font-bold border border-[#555]"
+                  >
+                    {copiedEmbed ? 'コピー済み!' : 'コードをコピー'}
+                  </button>
+                </div>
               </div>
               <p className="text-[10px] text-gray-500 flex items-center gap-1">
                 <Info size={10}/> はてなブログやWordPress等のHTMLモードで貼り付けてください
