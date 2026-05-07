@@ -2,19 +2,59 @@ import React, { useState } from 'react';
 import { Check, Copy, ExternalLink, Info, Share2 } from 'lucide-react';
 
 const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }) => {
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedEmbed, setCopiedEmbed] = useState(false);
 
-  const copyText = async (text) => {
-    await navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copyText = async (text, type) => {
+    const setCopied = (t) => {
+      if (t === 'url') {
+        setCopiedUrl(true);
+        setTimeout(() => setCopiedUrl(false), 2000);
+      } else if (t === 'embed') {
+        setCopiedEmbed(true);
+        setTimeout(() => setCopiedEmbed(false), 2000);
+      }
+    };
+
+    // 標準 API が使えるかチェック
+    if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        setCopied(type);
+        return;
+      } catch (err) {
+        console.warn('navigator.clipboard.writeText failed, falling back to execCommand', err);
+      }
+    }
+
+    // フォールバック: 一時 textarea を作って選択 → execCommand('copy')
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      // 見えなくする
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const successful = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (successful) {
+        setCopied(type);
+        return;
+      }
+      throw new Error('execCommand copy failed');
+    } catch (err) {
+      console.error('Clipboard copy failed', err);
+      alert('コピーに失敗しました。ブラウザの権限または環境を確認してください。');
+    }
   };
 
   const shareUrl = `${window.location.origin}${window.location.pathname}?id=${graphId}`;
   const embedCode = `<iframe src="${window.location.origin}${window.location.pathname}?id=${graphId}&edit=false" width="100%" height="500px" style="border:1px solid #444; border-radius:8px;"></iframe>`;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4">
       <div className="bg-[#252525] border border-[#444] rounded-xl w-full max-w-lg shadow-2xl animate-in zoom-in-95">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
@@ -53,10 +93,10 @@ const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }
                   className="flex-grow bg-[#1a1a1a] border border-[#444] rounded p-2 text-xs text-gray-400 outline-none"
                 />
                 <button
-                  onClick={() => copyText(shareUrl)}
+                  onClick={() => copyText(shareUrl, 'url')}
                   className="bg-purple-600 px-4 rounded text-xs font-bold hover:bg-purple-700 whitespace-nowrap"
                 >
-                  {copied ? <Check size={16}/> : 'URLをコピー'}
+                  {copiedUrl ? <Check size={16}/> : 'URLをコピー'}
                 </button>
               </div>
             </div>
@@ -72,10 +112,10 @@ const ShareModal = ({ graphId, allowEdit, setAllowEdit, ownerId, user, onClose }
                   className="w-full bg-[#1a1a1a] border border-[#444] rounded p-3 text-[10px] text-gray-400 font-mono h-24 outline-none resize-none"
                 />
                 <button
-                  onClick={() => copyText(embedCode)}
+                  onClick={() => copyText(embedCode, 'embed')}
                   className="absolute bottom-2 right-2 bg-[#333] hover:bg-[#444] px-3 py-1.5 rounded text-[10px] font-bold border border-[#555]"
                 >
-                  {copied ? 'コピー済み!' : 'コードをコピー'}
+                  {copiedEmbed ? 'コピー済み!' : 'コードをコピー'}
                 </button>
               </div>
               <p className="text-[10px] text-gray-500 flex items-center gap-1">
