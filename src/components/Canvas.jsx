@@ -42,46 +42,19 @@ const Canvas = ({
     };
   };
 
-  const toScreenPos = (worldX, worldY) => {
-    return {
-      x: worldX * scale + offset.x,
-      y: worldY * scale + offset.y
-    };
-  };
-
-  const getPortElement = (nodeId, portId, type) => {
-    const candidates = document.querySelectorAll('[data-node][data-port][data-type]');
-    for (const el of candidates) {
-      if (el.dataset.node === nodeId && el.dataset.port === portId && el.dataset.type === type) {
-        return el;
-      }
-    }
-    return null;
-  };
-
-  const getPortPos = (nodeId, portId, type) => {
-    // Prefer real DOM position and return canvas-local screen coordinates.
-    const portEl = getPortElement(nodeId, portId, type);
-    if (portEl) {
-      const canvasEl = document.getElementById('graph-canvas');
-      if (!canvasEl) return { x: 0, y: 0 };
-      const rect = portEl.getBoundingClientRect();
-      const canvasRect = canvasEl.getBoundingClientRect();
-      return {
-        x: rect.left + rect.width / 2 - canvasRect.left,
-        y: rect.top + rect.height / 2 - canvasRect.top
-      };
-    }
-
-    // Fallback for first render before DOM is ready.
+  const getPortPosWorld = (nodeId, portId, type) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return { x: 0, y: 0 };
+    
     const ports = type === 'input' ? node.inputs : node.outputs;
     const index = ports.findIndex(p => p.id === portId);
     const safeIndex = index >= 0 ? index : 0;
-    const worldX = type === 'input' ? node.x : node.x + 200;
-    const worldY = node.y + 40 + (safeIndex * 32) + 12;
-    return toScreenPos(worldX, worldY);
+    
+    // Header (26) + flex py-2 (8 padding) + ports...
+    // Center calculation matching Node.jsx exact height rules.
+    const x = type === 'input' ? node.x : node.x + 200;
+    const y = node.y + 46 + (safeIndex * 32); 
+    return { x, y };
   };
 
   const handleMouseMove = (e) => {
@@ -121,15 +94,12 @@ const Canvas = ({
 
   const handleWheel = (e) => {
     e.preventDefault();
-
-    // Ctrl/Cmd+wheel: zoom, normal wheel: pan
     if (e.ctrlKey || e.metaKey) {
       const zoomDelta = -e.deltaY * 0.001;
       const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + zoomDelta));
       onScaleChange?.(Number(next.toFixed(2)));
       return;
     }
-
     onOffsetChange?.({
       x: offset.x - e.deltaX,
       y: offset.y - e.deltaY
@@ -145,6 +115,97 @@ const Canvas = ({
     setScaleClamped(Number(e.target.value));
   };
 
+  // Robust Collision Checker for Rectangular Segments
+  const isSegmentBlocked = (p1, p2, excludeIds) => {
+    const margin = 10; // Clearance
+    const xMin = Math.min(p1.x, p2.x) - margin;
+    const xMax = Math.max(p1.x, p2.x) + margin;
+    const yMin = Math.min(p1.y, p2.y) - margin;
+    const yMax = Math.max(p1.y, p2.y) + margin;
+
+    return nodes.some(node => {
+      if (excludeIds.includes(node.id)) return false;
+      const numPorts = Math.max(node.inputs.length, node.outputs.length);
+      const h = 34 + (numPorts * 32); 
+      return xMax > node.x && xMin < (node.x + 200) &&
+             yMax > node.y && yMin < (node.y + h);
+    });
+  };
+
+  const renderSmartPath = (start, end, isSelected, fromNodeId, toNodeId) => {
+    const radius = 10;
+    const hMargin = 40;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const sign = dy >= 0 ? 1 : -1;
+
+    let midX = start.x + dx / 2;
+    let foundPath = false;
+
+    // Forward check
+    if (dx > hMargin * 2) {
+      const candidates = [
+        start.x + dx / 2,
+        start.x + hMargin,
+        end.x - hMargin,
+        start.x + dx * 0.25,
+        start.x + dx * 0.75,
+        start.x + dx * 0.1,
+        start.x + dx * 0.9,
+        start.x + 20,
+        end.x - 20
+      ];
+
+      for (const cx of candidates) {
+        if (!isSegmentBlocked(start, { x: cx, y: start.y }, [fromNodeId, toNodeId]) &&
+            !isSegmentBlocked({ x: cx, y: start.y }, { x: cx, y: end.y }, [fromNodeId, toNodeId]) &&
+            !isSegmentBlocked({ x: cx, y: end.y }, end, [fromNodeId, toNodeId])) {
+          midX = cx;
+          foundPath = true;
+          break;
+        }
+      }
+    }
+
+    if (foundPath || dx > hMargin * 2) {
+      const r = Math.min(radius, Math.abs(dy) / 2, Math.abs(midX - start.x), Math.abs(end.x - midX));
+      const d = `M ${start.x} ${start.y} 
+                 L ${midX - (midX > start.x ? r : -r)} ${start.y} 
+                 Q ${midX} ${start.y}, ${midX} ${start.y + sign * r} 
+                 L ${midX} ${end.y - sign * r} 
+                 Q ${midX} ${end.y}, ${midX + (end.x > midX ? r : -r)} ${end.y} 
+                 L ${end.x} ${end.y}`;
+      return (
+        <path 
+          d={d}
+          stroke={isSelected ? "#3b82f6" : "#888"}
+          strokeWidth={isSelected ? 4 : 2.5}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      );
+    } else {
+      // Detour routing for backward or very tight connections
+      const detour = 40;
+      const x1 = start.x + detour;
+      const x2 = end.x - detour;
+      const midY = start.y + dy / 2;
+      const d = `M ${start.x} ${start.y} 
+                 C ${x1} ${start.y}, ${x1} ${midY}, ${start.x + dx/2} ${midY} 
+                 S ${x2} ${end.y}, ${end.x} ${end.y}`;
+      return (
+        <path 
+          d={d}
+          stroke={isSelected ? "#3b82f6" : "#888"}
+          strokeWidth={isSelected ? 4 : 2.5}
+          fill="none"
+          strokeLinecap="round"
+        />
+      );
+    }
+  };
+
   return (
     <div 
       id="graph-canvas"
@@ -155,77 +216,84 @@ const Canvas = ({
       onWheel={handleWheel}
       onMouseDown={onMouseDown}
     >
-      {/** Transform wrapper for nodes */}
-      {(() => {
-        const transformStyle = { transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, transformOrigin: '0 0' };
-        return (
-          <div className="absolute inset-0" style={transformStyle}>
-            {nodes.map(node => (
-              <Node 
-                key={node.id} 
-                node={node} 
-                isSelected={selectedNodeId === node.id}
-                isViewOnly={isViewOnly}
-                onSelect={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
-                  onStartDrag={(e) => {
-                    if (isViewOnly) return;
-                    e.stopPropagation();
-                    const world = toWorldPos(e.clientX, e.clientY);
-                    setSelectedNodeId(node.id);
-                    setDraggingNodeId(node.id);
-                    setDragOffset({ x: world.x - node.x, y: world.y - node.y });
-                  }}
-                onStartLink={(e, nId, pId, type) => {
-                  if(isViewOnly) return;
-                  e.stopPropagation();
-                  const world = toWorldPos(e.clientX, e.clientY);
-                  setActiveLink({ nodeId: nId, portId: pId, type, mx: world.x, my: world.y });
-                }}
-              />
-            ))}
-          </div>
-        );
-      })()}
+      <div 
+        className="absolute inset-0" 
+        style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, transformOrigin: '0 0' }}
+      >
+        {/** Nodes rendered at zIndex 10 */}
+        {nodes.map(node => (
+          <Node 
+            key={node.id} 
+            node={node} 
+            isSelected={selectedNodeId === node.id}
+            isViewOnly={isViewOnly}
+            onSelect={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
+            onStartDrag={(e) => {
+              if (isViewOnly) return;
+              e.stopPropagation();
+              const world = toWorldPos(e.clientX, e.clientY);
+              setSelectedNodeId(node.id);
+              setDraggingNodeId(node.id);
+              setDragOffset({ x: world.x - node.x, y: world.y - node.y });
+            }}
+            onStartLink={(e, nId, pId, type) => {
+              if(isViewOnly) return;
+              e.stopPropagation();
+              const world = toWorldPos(e.clientX, e.clientY);
+              setActiveLink({ nodeId: nId, portId: pId, type, mx: world.x, my: world.y });
+            }}
+          />
+        ))}
 
-      {/** SVG overlay for links - sibling to nodes but using same transform */}
-      {(() => {
-        const overlayStyle = { position: 'absolute', inset: 0, zIndex: 999, pointerEvents: 'none', overflow: 'visible' };
-        return (
-          <svg style={overlayStyle} className="w-full h-full">
-        {links.map((link, i) => {
-          const start = getPortPos(link.fromNode, link.fromPort, 'output');
-          const end = getPortPos(link.toNode, link.toPort, 'input');
-          const cp1x = start.x + (end.x - start.x) / 2;
-          const isSel = selectedNodeId === link.fromNode || selectedNodeId === link.toNode;
-          return (
-            <path 
-              key={i}
-              d={`M ${start.x} ${start.y} C ${cp1x} ${start.y}, ${cp1x} ${end.y}, ${end.x} ${end.y}`}
-              stroke={isSel ? "#3b82f6" : "#888"}
-              strokeWidth={isSel ? 4 : 2.5}
-              fill="none"
-            />
-          );
-        })}
-        {activeLink && (() => {
-          const start = getPortPos(activeLink.nodeId, activeLink.portId, activeLink.type);
-          const mouse = toScreenPos(activeLink.mx, activeLink.my);
-          const isFromIn = activeLink.type === 'input';
-          const x1 = isFromIn ? mouse.x : start.x;
-          const y1 = isFromIn ? mouse.y : start.y;
-          const x2 = isFromIn ? start.x : mouse.x;
-          const y2 = isFromIn ? start.y : mouse.y;
-          return (
-            <path 
-              d={`M ${x1} ${y1} C ${(x1+x2)/2} ${y1}, ${(x1+x2)/2} ${y2}, ${x2} ${y2}`}
-              stroke="#fbbf24" strokeWidth={3} strokeDasharray="5,5" fill="none"
-            />
-          );
-        })()}
-          </svg>
-        );
-      })()}
-      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 px-3 py-2 bg-black/55 border border-[#444] rounded text-[11px] text-[#cfcfcf] backdrop-blur-sm">
+        {/** SVG overlay for links - high z-index and absolute mask */}
+        <svg style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none', zIndex: 1000 }}>
+          <defs>
+            <mask id="nodes-mask">
+              <rect x="-100000" y="-100000" width="200000" height="200000" fill="white" />
+              {nodes.map(node => {
+                const numPorts = Math.max(node.inputs.length, node.outputs.length);
+                const height = 34 + (numPorts * 32); 
+                return (
+                  <rect 
+                    key={node.id}
+                    x={node.x - 2} 
+                    y={node.y - 2} 
+                    width={204} 
+                    height={height + 4} 
+                    rx={10}
+                    fill="black" 
+                  />
+                );
+              })}
+            </mask>
+          </defs>
+          <g mask="url(#nodes-mask)">
+            {links.map((link, i) => {
+              const start = getPortPosWorld(link.fromNode, link.fromPort, 'output');
+              const end = getPortPosWorld(link.toNode, link.toPort, 'input');
+              const isSel = selectedNodeId === link.fromNode || selectedNodeId === link.toNode;
+              return <React.Fragment key={i}>{renderSmartPath(start, end, isSel, link.fromNode, link.toNode)}</React.Fragment>;
+            })}
+            {activeLink && (() => {
+              const start = getPortPosWorld(activeLink.nodeId, activeLink.portId, activeLink.type);
+              const isFromIn = activeLink.type === 'input';
+              const s = isFromIn ? { x: activeLink.mx, y: activeLink.my } : start;
+              const e = isFromIn ? start : { x: activeLink.mx, y: activeLink.my };
+              const dx = e.x - s.x;
+              const cp1x = s.x + Math.max(30, dx / 2);
+              const cp2x = e.x - Math.max(30, dx / 2);
+              return (
+                <path 
+                  d={`M ${s.x} ${s.y} C ${cp1x} ${s.y}, ${cp2x} ${e.y}, ${e.x} ${e.y}`}
+                  stroke="#fbbf24" strokeWidth={3} strokeDasharray="5,5" fill="none"
+                />
+              );
+            })()}
+          </g>
+        </svg>
+      </div>
+      
+      <div className="absolute bottom-4 left-4 z-[2000] flex items-center gap-2 px-3 py-2 bg-black/55 border border-[#444] rounded text-[11px] text-[#cfcfcf] backdrop-blur-sm">
         <button
           className="px-2 h-6 rounded bg-[#2b2b2b] border border-[#555] hover:bg-[#3a3a3a] text-[10px]"
           onClick={() => onFitAll && onFitAll()}
