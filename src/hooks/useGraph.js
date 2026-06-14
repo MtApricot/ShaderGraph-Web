@@ -4,6 +4,7 @@ export const useGraph = (initialNodes = [], initialLinks = []) => {
     const [nodes, setNodes] = useState(initialNodes);
     const [links, setLinks] = useState(initialLinks);
     const [selectedNodeId, setSelectedNodeId] = useState(null);
+    const [selectedLinkId, setSelectedLinkId] = useState(null);
     const [draggingNodeId, setDraggingNodeId] = useState(null);
     const[activeLink, setActiveLink] = useState(null);
 
@@ -17,12 +18,14 @@ export const useGraph = (initialNodes = [], initialLinks = []) => {
         outputs: [{ id: 'out1', name: 'Out' }]
         }]);
         setSelectedNodeId(id);
+        setSelectedLinkId(null);
     };
 
     const deleteNode = (id) => {
         setNodes(nodes.filter(n => n.id !== id));
         setLinks(links.filter(l => l.fromNode !== id && l.toNode !== id));
         if (selectedNodeId === id) setSelectedNodeId(null);
+        setSelectedLinkId(null);
     };
 
     const updateNode = (id, data) => {
@@ -33,6 +36,7 @@ export const useGraph = (initialNodes = [], initialLinks = []) => {
         nodes,setNodes,
         links,setLinks, 
         selectedNodeId,setSelectedNodeId,
+        selectedLinkId,setSelectedLinkId,
         draggingNodeId,setDraggingNodeId,
         activeLink,setActiveLink,
         addNode,deleteNode,updateNode

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Node from './Node';
 
 const MIN_SCALE = 0.2;
@@ -15,22 +15,40 @@ const Canvas = ({
   onSpaceKeyPress,
   onFitAll
 }) => {
-  const { nodes, links, selectedNodeId, setSelectedNodeId, activeLink, setActiveLink } = graph;
+  const { nodes, links, setLinks, selectedNodeId, setSelectedNodeId, selectedLinkId, setSelectedLinkId, activeLink, setActiveLink } = graph;
   const { draggingNodeId, setDraggingNodeId, setNodes } = graph;
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // スペースキーイベント
+  const getLinkKey = useCallback((l) => `${l.fromNode}-${l.fromPort}-${l.toNode}-${l.toPort}`, []);
+
+  // Keyboard events for deletion
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' && !isViewOnly) {
+      // Space key for search modal
+      if (e.code === 'Space' && !isViewOnly && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
         e.preventDefault();
         onSpaceKeyPress?.();
+      }
+
+      // Deletion logic
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isViewOnly) {
+        if (!['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+          if (selectedLinkId) {
+            e.preventDefault();
+            setLinks(links.filter(l => getLinkKey(l) !== selectedLinkId));
+            setSelectedLinkId(null);
+          } else if (selectedNodeId) {
+            e.preventDefault();
+            graph.deleteNode(selectedNodeId);
+            // selection clearing is handled inside deleteNode hook
+          }
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isViewOnly, onSpaceKeyPress]);
+  }, [isViewOnly, onSpaceKeyPress, selectedLinkId, selectedNodeId, links, setLinks, setSelectedLinkId, getLinkKey, graph]);
 
   const toWorldPos = (clientX, clientY) => {
     const canvasEl = document.getElementById('graph-canvas');
@@ -50,8 +68,7 @@ const Canvas = ({
     const index = ports.findIndex(p => p.id === portId);
     const safeIndex = index >= 0 ? index : 0;
     
-    // Header (26) + flex py-2 (8 padding) + ports...
-    // Center calculation matching Node.jsx exact height rules.
+    // Exact center calculation matching Node.jsx: 46 + index*32
     const x = type === 'input' ? node.x : node.x + 200;
     const y = node.y + 46 + (safeIndex * 32); 
     return { x, y };
@@ -84,7 +101,7 @@ const Canvas = ({
 
         const newLinks = links.filter((link) => !(link.toNode === toNode && link.toPort === toPort));
         newLinks.push({ fromNode, fromPort, toNode, toPort });
-        graph.setLinks(newLinks);
+        setLinks(newLinks);
       }
       setActiveLink(null);
     }
@@ -117,7 +134,7 @@ const Canvas = ({
 
   // Robust Collision Checker for Rectangular Segments
   const isSegmentBlocked = (p1, p2, excludeIds) => {
-    const margin = 10; // Clearance
+    const margin = 20; // Improved clearance
     const xMin = Math.min(p1.x, p2.x) - margin;
     const xMax = Math.max(p1.x, p2.x) + margin;
     const yMin = Math.min(p1.y, p2.y) - margin;
@@ -127,12 +144,13 @@ const Canvas = ({
       if (excludeIds.includes(node.id)) return false;
       const numPorts = Math.max(node.inputs.length, node.outputs.length);
       const h = 34 + (numPorts * 32); 
-      return xMax > node.x && xMin < (node.x + 200) &&
+      const w = 200;
+      return xMax > node.x && xMin < (node.x + w) &&
              yMax > node.y && yMin < (node.y + h);
     });
   };
 
-  const renderSmartPath = (start, end, isSelected, fromNodeId, toNodeId) => {
+  const renderSmartPath = (start, end, isSelected, fromNodeId, toNodeId, onSelect) => {
     const radius = 10;
     const hMargin = 40;
     const dx = end.x - start.x;
@@ -148,12 +166,14 @@ const Canvas = ({
         start.x + dx / 2,
         start.x + hMargin,
         end.x - hMargin,
-        start.x + dx * 0.25,
-        start.x + dx * 0.75,
+        start.x + dx * 0.2,
+        start.x + dx * 0.8,
         start.x + dx * 0.1,
         start.x + dx * 0.9,
         start.x + 20,
-        end.x - 20
+        end.x - 20,
+        start.x + dx * 0.4,
+        start.x + dx * 0.6,
       ];
 
       for (const cx of candidates) {
@@ -167,15 +187,39 @@ const Canvas = ({
       }
     }
 
+    let d;
     if (foundPath || dx > hMargin * 2) {
       const r = Math.min(radius, Math.abs(dy) / 2, Math.abs(midX - start.x), Math.abs(end.x - midX));
-      const d = `M ${start.x} ${start.y} 
+      d = `M ${start.x} ${start.y} 
                  L ${midX - (midX > start.x ? r : -r)} ${start.y} 
                  Q ${midX} ${start.y}, ${midX} ${start.y + sign * r} 
                  L ${midX} ${end.y - sign * r} 
                  Q ${midX} ${end.y}, ${midX + (end.x > midX ? r : -r)} ${end.y} 
                  L ${end.x} ${end.y}`;
-      return (
+    } else {
+      const detour = 40;
+      const x1 = start.x + detour;
+      const x2 = end.x - detour;
+      const midY = start.y + dy / 2;
+      d = `M ${start.x} ${start.y} 
+                 C ${x1} ${start.y}, ${x1} ${midY}, ${start.x + dx/2} ${midY} 
+                 S ${x2} ${end.y}, ${end.x} ${end.y}`;
+    }
+
+    return (
+      <g 
+        onMouseDown={(e) => { e.stopPropagation(); onSelect(); }}
+        style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+        className="group"
+      >
+        {/** Hit Area (Invisible but clickable) */}
+        <path 
+          d={d}
+          stroke="rgba(255,255,255,0.01)"
+          strokeWidth={20}
+          fill="none"
+        />
+        {/** Visible Path */}
         <path 
           d={d}
           stroke={isSelected ? "#3b82f6" : "#888"}
@@ -183,28 +227,12 @@ const Canvas = ({
           fill="none"
           strokeLinecap="round"
           strokeLinejoin="round"
+          className="transition-all duration-150 group-hover:stroke-gray-300"
         />
-      );
-    } else {
-      // Detour routing for backward or very tight connections
-      const detour = 40;
-      const x1 = start.x + detour;
-      const x2 = end.x - detour;
-      const midY = start.y + dy / 2;
-      const d = `M ${start.x} ${start.y} 
-                 C ${x1} ${start.y}, ${x1} ${midY}, ${start.x + dx/2} ${midY} 
-                 S ${x2} ${end.y}, ${end.x} ${end.y}`;
-      return (
-        <path 
-          d={d}
-          stroke={isSelected ? "#3b82f6" : "#888"}
-          strokeWidth={isSelected ? 4 : 2.5}
-          fill="none"
-          strokeLinecap="round"
-        />
-      );
-    }
+      </g>
+    );
   };
+
 
   return (
     <div 
@@ -214,7 +242,11 @@ const Canvas = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
-      onMouseDown={onMouseDown}
+      onMouseDown={(e) => {
+        setSelectedNodeId(null);
+        setSelectedLinkId(null);
+        onMouseDown?.(e);
+      }}
     >
       <div 
         className="absolute inset-0" 
@@ -227,18 +259,42 @@ const Canvas = ({
             node={node} 
             isSelected={selectedNodeId === node.id}
             isViewOnly={isViewOnly}
-            onSelect={(e) => { e.stopPropagation(); setSelectedNodeId(node.id); }}
+            onSelect={(e) => { 
+              e.stopPropagation(); 
+              setSelectedNodeId(node.id); 
+              setSelectedLinkId(null); // Mutually exclusive
+            }}
             onStartDrag={(e) => {
               if (isViewOnly) return;
               e.stopPropagation();
               const world = toWorldPos(e.clientX, e.clientY);
               setSelectedNodeId(node.id);
+              setSelectedLinkId(null);
               setDraggingNodeId(node.id);
               setDragOffset({ x: world.x - node.x, y: world.y - node.y });
             }}
             onStartLink={(e, nId, pId, type) => {
               if(isViewOnly) return;
               e.stopPropagation();
+              
+              // Re-plugging logic: if dragging from an input port that has a link, detach it.
+              if (type === 'input') {
+                const existing = links.find(l => l.toNode === nId && l.toPort === pId);
+                if (existing) {
+                  setLinks(links.filter(l => l !== existing));
+                  // Immediately start active link from the OTHER end (output)
+                  const world = toWorldPos(e.clientX, e.clientY);
+                  setActiveLink({ 
+                    nodeId: existing.fromNode, 
+                    portId: existing.fromPort, 
+                    type: 'output', 
+                    mx: world.x, 
+                    my: world.y 
+                  });
+                  return;
+                }
+              }
+
               const world = toWorldPos(e.clientX, e.clientY);
               setActiveLink({ nodeId: nId, portId: pId, type, mx: world.x, my: world.y });
             }}
@@ -256,11 +312,11 @@ const Canvas = ({
                 return (
                   <rect 
                     key={node.id}
-                    x={node.x - 2} 
-                    y={node.y - 2} 
-                    width={204} 
-                    height={height + 4} 
-                    rx={10}
+                    x={node.x - 4} 
+                    y={node.y - 4} 
+                    width={208} 
+                    height={height + 8} 
+                    rx={12}
                     fill="black" 
                   />
                 );
@@ -271,8 +327,25 @@ const Canvas = ({
             {links.map((link, i) => {
               const start = getPortPosWorld(link.fromNode, link.fromPort, 'output');
               const end = getPortPosWorld(link.toNode, link.toPort, 'input');
-              const isSel = selectedNodeId === link.fromNode || selectedNodeId === link.toNode;
-              return <React.Fragment key={i}>{renderSmartPath(start, end, isSel, link.fromNode, link.toNode)}</React.Fragment>;
+              
+              const linkKey = getLinkKey(link);
+              const isSel = selectedLinkId === linkKey || selectedNodeId === link.fromNode || selectedNodeId === link.toNode;
+              
+              return (
+                <React.Fragment key={i}>
+                  {renderSmartPath(
+                    start, 
+                    end, 
+                    isSel, 
+                    link.fromNode, 
+                    link.toNode,
+                    () => {
+                      setSelectedLinkId(linkKey);
+                      setSelectedNodeId(null);
+                    }
+                  )}
+                </React.Fragment>
+              );
             })}
             {activeLink && (() => {
               const start = getPortPosWorld(activeLink.nodeId, activeLink.portId, activeLink.type);
