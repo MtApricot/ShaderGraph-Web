@@ -604,10 +604,10 @@ const layoutImportedShaderGraphNodes = (nodes, links) => {
     levels.set(node.id, finalOutputLevel);
   });
 
-  const LAYER_X_GAP = 260;
-  const LAYER_Y_GAP = 120;
-  const BASE_X = 60;
-  const BASE_Y = 60;
+  const LAYER_X_GAP = 320; // Increased from 260
+  const LAYER_Y_GAP = 180; // Increased from 120
+  const BASE_X = 100;
+  const BASE_Y = 100;
   const FINAL_X = BASE_X + finalOutputLevel * LAYER_X_GAP;
   const outputGroups = {
     vertex: [],
@@ -647,11 +647,11 @@ const layoutImportedShaderGraphNodes = (nodes, links) => {
     placeRow(items, BASE_X + level * LAYER_X_GAP, BASE_Y, LAYER_Y_GAP);
   });
 
-  const outputRowGap = 82;
+  const outputRowGap = 160; // Increased from 82
   const outputX = FINAL_X;
   placeRow(outputGroups.vertex, outputX, BASE_Y, outputRowGap);
-  placeRow(outputGroups.fragment, outputX, BASE_Y + 240, outputRowGap);
-  placeRow(outputGroups.other, outputX, BASE_Y + 480, outputRowGap);
+  placeRow(outputGroups.fragment, outputX, BASE_Y + 400, outputRowGap);
+  placeRow(outputGroups.other, outputX, BASE_Y + 800, outputRowGap);
 
   // Keep a gentle anti-overlap pass as a last resort in case the input graph has cycles or dense layers.
   return spreadOverlappingNodes(laidOut);
